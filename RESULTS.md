@@ -119,7 +119,7 @@ one.
 - Dataset provenance is weakly documented; metrics describe this dataset, not PCOS
   in the general population.
 - Follicle count, the strongest predictor, overlaps with the diagnostic criteria
-  (soft label leakage).
+  (soft label leakage). This was tested directly; see Section 5.
 - Recall for the PCOS class is 0.73; the model misses about a quarter of true cases.
 - Sample size is modest (541 patients, 177 positive), so estimates carry meaningful
   uncertainty.
@@ -127,14 +127,76 @@ one.
 
 ---
 
-## 5. Planned next step
+## 5. Leakage experiment: removing the follicle-count features
 
-To quantify how much the model depends on the near-diagnostic follicle-count
-features, a follow-up will repeat the full pipeline with **both follicle-count
-columns removed**. If the ROC AUC stays high, the model carries real independent
-signal. If it drops sharply, that confirms performance was driven largely by a
-feature effectively part of the diagnosis. Either outcome is a meaningful, honest
-result.
+To quantify how much the model depended on the near-diagnostic follicle-count
+features, the full pipeline was repeated with **both follicle-count columns
+(Follicle No. (L) and Follicle No. (R)) removed**. Everything else was held
+identical: the same cleaning, the same random seed and train/test split, and the
+same two models. Only the two columns changed, so the comparison is fair.
+
+### 5.1 Before-and-after comparison (random forest)
+
+| Metric | With follicle count | Without follicle count | Change |
+|---|---|---|---|
+| ROC AUC | 0.945 | 0.899 | -0.046 |
+| PR AUC (average precision) | 0.928 | 0.791 | -0.137 |
+| Accuracy | 0.897 | 0.816 | -0.081 |
+| Recall (PCOS class) | 0.73 (32/44) | 0.52 (23/44) | -0.21 |
+
+(Logistic regression behaved the same way: ROC AUC fell from 0.940 to 0.868, and
+PR AUC from 0.915 to 0.748.)
+
+### 5.2 Confusion matrix without follicle count (random forest, test set)
+
+|  | Predicted non-PCOS | Predicted PCOS |
+|---|---|---|
+| **Actual non-PCOS** | 88 | 4 |
+| **Actual PCOS** | 21 | 23 |
+
+Of the 44 true PCOS patients, the model now catches only 23 and misses 21, against
+32 caught when follicle count was included.
+
+### 5.3 Top features after removing follicle count (random forest)
+
+Skin darkening, hair growth, weight gain, AMH, and cycle length. These are all
+recognised clinical signs of PCOS (hyperandrogenism and menstrual dysfunction)
+rather than parts of the ultrasound-based diagnostic measurement. The model that
+remains is therefore leaning only on genuine symptoms.
+
+### 5.4 Interpretation (a two-part finding)
+
+The headline result is that the experiment splits cleanly into two halves, and both
+matter.
+
+**Part one: the model is robust in its ranking ability.** ROC AUC fell only
+slightly, from 0.945 to 0.899. ROC AUC measures how well the model separates PCOS
+from non-PCOS across all thresholds. Its small drop shows the model retains real,
+independent predictive signal from genuine clinical symptoms even with the
+near-diagnostic feature removed. The model was never *only* a follicle-count
+detector.
+
+**Part two: the leakage mattered where it counts clinically.** Recall for the PCOS
+class fell sharply, from 0.73 to 0.52, and PR AUC fell from 0.928 to 0.791. At the
+chosen decision threshold the model now misses nearly half of true PCOS cases
+instead of a quarter. Follicle count was doing heavy lifting in the model's ability
+to actually *catch* positive cases, which is the behaviour a clinician cares about
+most. This is direct, quantified evidence that the soft label leakage inflated the
+original model's apparent sensitivity.
+
+Taken together: the follicle-removed model is arguably the more *honest* model,
+because every feature it uses is a true symptom rather than part of the diagnosis,
+but it is also the less *sensitive* model, because the feature it lost was carrying
+much of the detection power. Both statements are true at once, and reporting only
+one of them would misrepresent the result.
+
+### 5.5 Remaining limitation
+
+Follicle *size* (Avg. F size) was retained and still appears among the top features
+in the logistic regression. Follicle size derives from the same ultrasound
+assessment as follicle count, so a stricter version of this experiment would remove
+all imaging-derived features. This was not done here, and is noted as a known
+limitation.
 
 ---
 
